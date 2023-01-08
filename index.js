@@ -41,11 +41,6 @@ app.get(`${baseUrl}/admin/healthcheck`, async (req, res) => {
 })
 
 
-const hellovar = "hello";
-const hello_world = `${hellovar} world`
-console.log(hello_world)
-
-
 app.get(`${baseUrl}/questionnaire/:questionnaireID`, async (req, res) => {
     const questionnaireId = req.params.questionnaireID;
     try {
@@ -53,7 +48,6 @@ app.get(`${baseUrl}/questionnaire/:questionnaireID`, async (req, res) => {
         let questions = await connection.query(`SELECT * FROM Question WHERE questionnaire_id = '${questionnaireId}'`);
         questions = questions[0];
         let questionList = [];
-        console.log(questions.length)
         for(const question of questions) {
             questionList.push(
                 {
@@ -70,6 +64,6 @@ app.get(`${baseUrl}/questionnaire/:questionnaireID`, async (req, res) => {
         res.send({"questionnaireID": questionnaireId, "questionnaireTitle":questionnaireTitle,"keywords":keywords, "questions": questionList});
     }
     catch(error) {
-        res.status(500).send({ error: error });
+        res.status(500).send({ error: "Could not get questionnaire" });
     }
 })
