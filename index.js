@@ -40,7 +40,6 @@ app.get(`${baseUrl}/admin/healthcheck`, async (req, res) => {
     }
 })
 
-
 app.get(`${baseUrl}/questionnaire/:questionnaireID`, async (req, res) => {
     const questionnaireId = req.params.questionnaireID;
     try {
@@ -65,5 +64,44 @@ app.get(`${baseUrl}/questionnaire/:questionnaireID`, async (req, res) => {
     }
     catch(error) {
         res.status(500).send({ error: "Could not get questionnaire" });
+    }
+})
+
+app.get(`${baseUrl}/question/:questionnaireID/:questionID`, async (req, res) => {
+    const questionnaireId = req.params.questionnaireID;
+    const questionId = req.params.questionID;
+    try {
+        await connection.connect();
+        let question = await connection
+            .query(`SELECT * FROM Question
+         WHERE questionnaire_id = '${questionnaireId}' AND question_id = '${questionId}'`);
+        question = question[0][0];
+        let options = await connection
+            .query(`SELECT * FROM Q_Option o 
+                        INNER JOIN Question q ON o.question_id = q.question_id 
+                        WHERE o.question_id = '${questionId}' AND q.questionnaire_id = '${questionnaireId}';`)
+        let optionList = [];
+        for(const option of options[0]) {
+            optionList.push(
+                {
+                    "optID": option.option_id,
+                    "opttxt": option.option_text,
+                    "nextqID": option.next_q_id,
+                }
+            )
+        }
+        console.log(optionList)
+        res.send(
+            {
+                "questionnaireID": questionnaireId,
+                "qID": questionId,
+                "qtext": question.question_text,
+                "required": question.required,
+                "type": question.q_type,
+                "options": optionList,
+            });
+    }
+    catch(error) {
+        res.status(500).send({ error: "Could not get question" });
     }
 })
