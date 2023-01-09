@@ -40,7 +40,7 @@ app.get(`${baseUrl}/questionnaires`, async (req, res) => {
 })
 
 
-// 1
+// ADMIN 1
 app.get(`${baseUrl}/admin/healthcheck`, async (req, res) => {
     let connectionString;
     try {
@@ -53,16 +53,12 @@ app.get(`${baseUrl}/admin/healthcheck`, async (req, res) => {
         res.send({"status":"failed", "dbconnection": connectionString})
     }
 })
-// 2
+// ADMIN 2
 app.post(`${baseUrl}/admin/questionnaire_upd`, upload.single('file'), async (req, res) => {
     try {
         await connection.connect();
         const jsonString = req.file.buffer.toString('utf8');
         const QQ = JSON.parse(jsonString);
-        const qqExists = await connection.query(`SELECT * FROM Questionnaire WHERE questionnaire_id = QQ.questionnaireID`);
-        if(qqExists.length!==0){
-            throw 'Already exists'
-        }
         await connection.query(`INSERT INTO Questionnaire VALUES ('${QQ.questionnaireID}', '${QQ.questionnaireTitle}','${QQ.keywords.join(',')}')`);
         for(let question of QQ.questions) {
             await connection.query(`INSERT INTO Question VALUES ('${question.qID}', '${question.qtext}','${question.required}','${question.type}','${QQ.questionnaireID}')`);
@@ -75,6 +71,41 @@ app.post(`${baseUrl}/admin/questionnaire_upd`, upload.single('file'), async (req
     }
     catch(error) {
         res.send('Failed to upload questionnaire')
+    }
+})
+// ADMIN 3
+app.post(`${baseUrl}/admin/resetall`, async (req, res) => {
+
+    try {
+        await connection.connect();
+        await connection.query(`DELETE FROM answer`)
+        await connection.query(`DELETE FROM Q_Session`)
+
+        res.send(
+            {
+                "Status": "System initialized"
+            })
+    }
+    catch(error) {
+        res.status(500).send({ error: `Can't initialize \n ${error}` });
+    }
+})
+// ADMIN 4
+app.post(`${baseUrl}/admin/resetq/:questionnaireID`, async (req, res) => {
+    const questionnaireId = req.params.questionnaireID;
+
+    try {
+        await connection.connect();
+        await connection.query(`DELETE FROM answer WHERE questionnaire_id='${questionnaireId}' `)
+
+
+        res.send(
+            {
+                "Status": `Deleted every answer from questionnaire ${questionnaireId}`
+            })
+    }
+    catch(error) {
+        res.status(500).send({ error: `Can't delete \n ${error}` });
     }
 })
 // a
@@ -167,3 +198,83 @@ app.get(`${baseUrl}/doanswer/:questionnaireID/:questionID/:session/:optionID`, a
     }
 })
 // d
+app.get(`${baseUrl}/getsessionanswers/:questionnaireID/:session`, async (req, res) => {
+    const questionnaireId = req.params.questionnaireID;
+    const sessionId = req.params.session;
+
+    try {
+        await connection.connect();
+        const wansFind = await connection.query(`SELECT * FROM answer WHERE session_id = '${sessionId}' and questionnaire_id='${questionnaireId}' order by question_id`)
+
+        console.log(wansFind[0])
+        let w_answerList = [];
+
+        for(const answer of wansFind[0]) {
+            w_answerList.push(
+                {
+                    "qID": answer.question_id,
+                    "ans": answer.option_id,
+                }
+            )
+        }
+
+        res.send(
+            {
+                "questionnaireID": questionnaireId,
+                "session": sessionId,
+                "answers": w_answerList
+            })
+    }
+    catch(error) {
+        res.status(500).send({ error: `Can't get answers \n ${error}` });
+    }
+})
+// e
+app.get(`${baseUrl}/getquestionanswers/:questionnaireID/:questionID`, async (req, res) => {
+    const questionnaireId = req.params.questionnaireID;
+    const questionId = req.params.questionID;
+
+    try {
+        await connection.connect();
+        const ansFind = await connection.query(`SELECT * FROM answer WHERE question_id = '${questionId}' and questionnaire_id='${questionnaireId}' `)
+
+        console.log(ansFind[0])
+        let answerList = [];
+
+        for(const answer of ansFind[0]) {
+            answerList.push(
+                {
+                    "session_id": answer.session_id,
+                    "optID": answer.option_id,
+                }
+            )
+        }
+
+        res.send(
+            {
+                "questionnaireID": questionnaireId,
+                "qID": questionId,
+                "answers": answerList
+            })
+    }
+    catch(error) {
+        res.status(500).send({ error: `Can't get answers \n ${error}` });
+    }
+})
+
+function jsonToCsv(json) {
+    const csvRows = [];
+    json = JSON.parse(json)
+    // Add the headers row
+    csvRows.push(Object.keys(json).join(','));
+
+    // Add the data rows
+    csvRows.push(Object.values(json).join(','));
+
+    // Add the answers rows
+    json.answers.forEach(answer => {
+        csvRows.push(Object.values(answer).join(','));
+    });
+
+    return csvRows.join('\n');
+}
