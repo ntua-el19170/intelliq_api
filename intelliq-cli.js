@@ -5,6 +5,8 @@ import inquirer from "inquirer";
 import {createSpinner} from "nanospinner";
 import axios from "axios";
 import ansiRegex from "ansi-regex";
+import fs from 'fs'
+import FormData from "form-data";
 
 let questionnaireId;
 
@@ -53,12 +55,26 @@ async function chooseQQ() {
 
 async function showQuestions(questionnaireId) {
     const questions = (await apiGet(`questionnaire/${questionnaireId}`)).questions;
-    for(const question of questions) {
-        console.log('\n')
-        const options = await apiGet(`question/${questionnaireId}/${question.qID}`)
-        await ask(options.qtext,options.options.map(option => `${chalk.gray(option.optID)}  ${option.opttxt} `));
+    let currentQuestion = questions[0]
+    while(currentQuestion){
+        const options = await apiGet(`question/${questionnaireId}/${currentQuestion.qID}`)
+        let choice = await ask(options.qtext, options.options.map((option) => {
+            return {
+                name: `${chalk.gray(option.optID)}  ${option.opttxt}`,
+                value: option.nextqID
+            }
+        }));
+        if(choice==null) break;
+        currentQuestion = await apiGet(`question/${questionnaireId}/${choice}`)
     }
-    // console.log( questions)
+    console.log(chalk.magenta('\n You have answered all the questions! \n'))
+    const doSubmit = await ask(chalk.yellow('Would you like to submit your answers?'), ['Yes','No'])
+    if(doSubmit==='Yes') {
+        console.log('Successfully submitted answers')
+    }
+    else {
+        console.log('Submission Canceled')
+    }
 }
 
 async function ask(message,choices) {
@@ -68,7 +84,7 @@ async function ask(message,choices) {
         message: message,
         choices: choices,
     });
-    return
+    return answers.qID
 }
 
 
@@ -79,7 +95,22 @@ async function handleAnswer(answer){
     }, 700)
 }
 
+async function uploadQQ(filePath) {
+    const form = new FormData();
+    form.append('file', fs.createReadStream(filePath));
+
+    try {
+        const response = await axios.post('http://localhost:9103/intelliq_api/admin/questionnaire_upd', form, {
+            headers: form.getHeaders()
+        });
+    } catch (error) {
+        console.error(error);
+    }
+}
+
+await uploadQQ('./Q000.json')
+
 await welcome();
 await chooseQQ();
 
-// await ask();
+await ask();

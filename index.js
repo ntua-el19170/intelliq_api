@@ -1,10 +1,13 @@
 import express from 'express'
 import mysql from 'mysql2'
+import multer from 'multer'
+import fs from "fs";
 
 const app = express();
 
 const PORT = 9103;
 const baseUrl = '/intelliq_api';
+const upload = multer();
 
 app.use(express.json());
 
@@ -48,6 +51,30 @@ app.get(`${baseUrl}/admin/healthcheck`, async (req, res) => {
     catch(error) {
         connectionString = `server=${connection.config.host};user id=${connection.config.user};password=${connection.config.password};database=${connection.config.database}`;
         res.send({"status":"failed", "dbconnection": connectionString})
+    }
+})
+// 2
+app.post(`${baseUrl}/admin/questionnaire_upd`, upload.single('file'), async (req, res) => {
+    try {
+        await connection.connect();
+        const jsonString = req.file.buffer.toString('utf8');
+        const QQ = JSON.parse(jsonString);
+        const qqExists = await connection.query(`SELECT * FROM Questionnaire WHERE questionnaire_id = QQ.questionnaireID`);
+        if(qqExists.length!==0){
+            throw 'Already exists'
+        }
+        await connection.query(`INSERT INTO Questionnaire VALUES ('${QQ.questionnaireID}', '${QQ.questionnaireTitle}','${QQ.keywords.join(',')}')`);
+        for(let question of QQ.questions) {
+            await connection.query(`INSERT INTO Question VALUES ('${question.qID}', '${question.qtext}','${question.required}','${question.type}','${QQ.questionnaireID}')`);
+        }
+        for(let question of QQ.questions) {
+            for(let option of question.options) {
+                await connection.query(`INSERT INTO Q_Option VALUES ('${option.optID}', '${option.opttxt}','${question.qID}',${option.nextqID=='-' ? null : `'${option.nextqID}'`},'${QQ.questionnaireID}')`)
+            }
+        }
+    }
+    catch(error) {
+        res.send('Failed to upload questionnaire')
     }
 })
 // a
@@ -116,7 +143,7 @@ app.get(`${baseUrl}/question/:questionnaireID/:questionID`, async (req, res) => 
         res.status(500).send({ error: "Could not get question" });
     }
 })
-
+// c
 app.get(`${baseUrl}/doanswer/:questionnaireID/:questionID/:session/:optionID`, async (req, res) => {
     const questionnaireId = req.params.questionnaireID;
     const questionId = req.params.questionID;
@@ -125,14 +152,18 @@ app.get(`${baseUrl}/doanswer/:questionnaireID/:questionID/:session/:optionID`, a
     try {
         await connection.connect();
         const sessionFind = await connection.query(`SELECT * FROM Q_Session WHERE session_id = '${sessionId}'`)
-        console.log(sessionFind[0])
         if(sessionFind[0].length==0){
             await connection.query(`INSERT INTO Q_Session VALUES ('${sessionId}','${Date().toString()}','FALSE','${questionnaireId}')`)
         }
-        const result = await connection.query(`INSERT INTO Answer VALUES (default,'${sessionId}','${questionId}','${optionId}','${questionnaireId}')`)
-        res.send(result)
+        const answerExists = await connection.query(`SELECT * FROM Answer WHERE session_id = '${sessionId}' AND question_id = '${questionId}'`)
+        if(answerExists[0].length==0){
+            const result = await connection.query(`INSERT INTO Answer VALUES (default,'${sessionId}','${questionId}','${optionId}','${questionnaireId}')`)
+            res.send(result)
+        }
+        else throw 'Already in database';
     }
     catch(error) {
         res.status(500).send({ error: `Could not submit answer \n ${error}` });
     }
 })
+// d
