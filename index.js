@@ -1,7 +1,7 @@
-const express = require('express')
-// const request = require('request-promise')
+import express from 'express'
+import mysql from 'mysql2'
+
 const app = express();
-const mysql = require('mysql2')
 
 const PORT = 9103;
 const baseUrl = '/intelliq_api';
@@ -18,15 +18,26 @@ const connection = mysql.createConnection({
     database: 'que_database'
 }).promise();
 
-async function test() {
-    const result = await connection.query("SHOW COLUMNS FROM Question");
-    return result;
-}
+
 
 app.get(baseUrl,(req,res)=>{
     res.send('welcome to intelliq')
 });
 
+app.get(`${baseUrl}/questionnaires`, async (req, res) => {
+    try {
+        await connection.connect()
+        let questionnaires = await connection
+            .query(`SELECT * FROM Questionnaire`);
+        res.send(questionnaires[0]);
+    }
+    catch(error) {
+        res.send({"error":"Failed to get questionnaires"})
+    }
+})
+
+
+// 1
 app.get(`${baseUrl}/admin/healthcheck`, async (req, res) => {
     let connectionString;
     try {
@@ -39,7 +50,7 @@ app.get(`${baseUrl}/admin/healthcheck`, async (req, res) => {
         res.send({"status":"failed", "dbconnection": connectionString})
     }
 })
-
+// a
 app.get(`${baseUrl}/questionnaire/:questionnaireID`, async (req, res) => {
     const questionnaireId = req.params.questionnaireID;
     try {
@@ -66,7 +77,7 @@ app.get(`${baseUrl}/questionnaire/:questionnaireID`, async (req, res) => {
         res.status(500).send({ error: "Could not get questionnaire" });
     }
 })
-
+// b
 app.get(`${baseUrl}/question/:questionnaireID/:questionID`, async (req, res) => {
     const questionnaireId = req.params.questionnaireID;
     const questionId = req.params.questionID;
@@ -103,5 +114,25 @@ app.get(`${baseUrl}/question/:questionnaireID/:questionID`, async (req, res) => 
     }
     catch(error) {
         res.status(500).send({ error: "Could not get question" });
+    }
+})
+
+app.get(`${baseUrl}/doanswer/:questionnaireID/:questionID/:session/:optionID`, async (req, res) => {
+    const questionnaireId = req.params.questionnaireID;
+    const questionId = req.params.questionID;
+    const sessionId = req.params.session;
+    const optionId = req.params.optionID;
+    try {
+        await connection.connect();
+        const sessionFind = await connection.query(`SELECT * FROM Q_Session WHERE session_id = '${sessionId}'`)
+        console.log(sessionFind[0])
+        if(sessionFind[0].length==0){
+            await connection.query(`INSERT INTO Q_Session VALUES ('${sessionId}','${Date().toString()}','FALSE','${questionnaireId}')`)
+        }
+        const result = await connection.query(`INSERT INTO Answer VALUES (default,'${sessionId}','${questionId}','${optionId}','${questionnaireId}')`)
+        res.send(result)
+    }
+    catch(error) {
+        res.status(500).send({ error: `Could not submit answer \n ${error}` });
     }
 })
